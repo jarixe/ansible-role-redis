@@ -1,153 +1,54 @@
 # Ansible Role: Redis
 
-[![CI](https://github.com/geerlingguy/ansible-role-php-redis/actions/workflows/ci.yml/badge.svg)](https://github.com/geerlingguy/ansible-role-php-redis/actions/workflows/ci.yml)
-
 Installs [Redis](http://redis.io/) on Linux.
-
-## Requirements
-
-On RedHat-based distributions, requires the EPEL repository (you can simply add the role `geerlingguy.repo-epel` to install ensure EPEL is available).
 
 ## Role Variables
 
-```yaml
-redis_enablerepo: epel
-```
+### Role vars (global)
 
-(Used only on RHEL/CentOS) The repository to use for Redis installation.
+| Variable | Default | Description |
+| --- | --- | --- |
+| `redis_enabled` | `true` | Whether instance services are started/enabled. |
+| `redis_port` | `6379` | Default port used when `redis_instances` is empty. |
+| `redis_bind_interface` | `127.0.0.1` | Bind address (set `0.0.0.0` to listen on all interfaces). |
+| `redis_unixsocket` | `''` | Optional Unix socket path. |
+| `redis_timeout` | `300` | Client idle timeout (`0` disables). |
+| `redis_loglevel` | `notice` | Log level. |
+| `redis_logfile` | `/var/log/redis/redis-server.log` | Base logfile path (per-instance logfile is generated). |
+| `redis_databases` | `16` | Number of Redis DBs. |
+| `redis_save` | `[900 1, 300 10, 60 10000]` | RDB snapshot rules. |
+| `redis_rdbcompression` | `yes` | RDB compression toggle. |
+| `redis_dbfilename` | `dump.rdb` | RDB filename. |
+| `redis_dbdir` | `/var/lib/redis` | Base data dir (per-instance data dir is generated). |
+| `redis_maxmemory` | `0` | Default max memory (`0` = unlimited). |
+| `redis_maxmemory_policy` | `noeviction` | Default eviction policy. |
+| `redis_maxmemory_samples` | `5` | Samples for LRU/LFU approximation. |
+| `redis_appendonly` | `no` | AOF persistence toggle. |
+| `redis_appendfsync` | `everysec` | AOF fsync mode (`always`, `everysec`, `no`). |
+| `redis_includes` | `[]` | Extra include files in `redis.conf`. |
+| `redis_requirepass` | `""` | Default password when not set per instance. |
+| `redis_disabled_commands` | `[]` | Commands to disable via `rename-command ... ""`. |
+| `redis_extra_config` | `""` | Extra raw Redis config appended at end of file. |
+| `redis_instances` | `[]` | List of instances (see table below). |
+| `redis_conf_dir` | `/etc/redis` | Directory for generated instance configs. |
+| `redis_runtime_dir` | `/run/redis` | PID/runtime directory. |
+| `redis_log_dir` | `/var/log/redis` | Directory for per-instance logs. |
+| `redis_data_dir` | `/var/lib/redis` | Directory for per-instance data folders. |
+| `redis_supervised` | `systemd` | Value for `supervised` in config. |
+| `redis_daemonize` | `no` | Value for `daemonize` in config. |
+| `redis_disable_default_service` | `true` | Disable packaged default `redis-server` service. |
+| `redis_enablerepo` | `epel` | RHEL-family repo override (not used on Debian). |
+| `redis_package` | OS-specific | Package name (`redis-server` on Debian). |
 
-Available variables are listed below, along with default values (see `defaults/main.yml`):
+### Instance vars (`redis_instances[]`)
 
-```yaml
-redis_enabled: true
-```
-
-If unset, Redis will not start at boot.
-
-```yaml
-redis_port: 6379
-redis_bind_interface: 127.0.0.1
-```
-
-Port and interface on which Redis will listen. Set the interface to `0.0.0.0` to listen on all interfaces.
-
-```yaml
-redis_unixsocket: ''
-```
-
-If set, Redis will also listen on a local Unix socket.
-
-```yaml
-redis_timeout: 300
-```
-
-Close a connection after a client is idle `N` seconds. Set to `0` to disable timeout.
-
-```yaml
-redis_loglevel: "notice"
-redis_logfile: /var/log/redis/redis-server.log
-```
-
-Log level and log location (valid levels are `debug`, `verbose`, `notice`, and `warning`).
-
-```yaml
-redis_databases: 16
-```
-
-The number of Redis databases.
-
-```yaml
-# Set to an empty set to disable persistence (saving the DB to disk).
-redis_save:
-  - 900 1
-  - 300 10
-  - 60 10000
-```
-
-Snapshotting configuration; setting values in this list will save the database to disk if the given number of seconds (e.g. `900`) and the given number of write operations (e.g. `1`) have occurred.
-
-```yaml
-redis_rdbcompression: "yes"
-redis_dbfilename: dump.rdb
-redis_dbdir: /var/lib/redis
-```
-
-Database compression and location configuration.
-
-```yaml
-    redis_maxmemory: 0
-```
-
-Limit memory usage to the specified amount of bytes. Leave at 0 for unlimited.
-
-```yaml
-redis_maxmemory_policy: "noeviction"
-```
-
-The method to use to keep memory usage below the limit, if specified. See [Using Redis as an LRU cache](http://redis.io/topics/lru-cache).
-
-```yaml
-redis_maxmemory_samples: 5
-```
-
-Number of samples to use to approximate LRU. See [Using Redis as an LRU cache](http://redis.io/topics/lru-cache).
-
-```yaml
-redis_appendonly: "no"
-```
-
-The appendonly option, if enabled, affords better data durability guarantees, at the cost of slightly slower performance.
-
-```yaml
-redis_appendfsync: "everysec"
-```
-
-Valid values are `always` (slower, safest), `everysec` (happy medium), or `no` (let the filesystem flush data when it wants, most risky).
-
-```yaml
-# Add extra include files for local configuration/overrides.
-redis_includes: []
-```
-
-Add extra include file paths to this list to include more/localized Redis configuration.
-
-The redis package name for installation via the system package manager. Defaults to `redis-server` on Debian and `redis` on RHEL.
-
-```yaml
-redis_package: "redis-server"
-```
-
-(Default for RHEL shown) The redis package name for installation via the system package manager. Defaults to `redis-server` on Debian and `redis` on RHEL.
-
-```yaml
-redis_requirepass: ""
-```
-
-Set a password to require authentication to Redis. You can generate a strong password using `echo "my_password_here" | sha256sum`.
-
-```yaml
-redis_disabled_commands: []
-```
-
-For extra security, you can disable certain Redis commands (this is especially important if Redis is publicly accessible). For example:
-
-```yaml
-redis_disabled_commands:
-  - FLUSHDB
-  - FLUSHALL
-  - KEYS
-  - PEXPIRE
-  - DEL
-  - CONFIG
-  - SHUTDOWN
-```
-
-```yaml
-redis_extra_config: |-
-  # Extra redis configuration lines can be added here.
-```
-
-Extra Redis configuration lines that will be appended to the end of the `redis.conf` file.
+| Field | Required | Default / Fallback | Description |
+| --- | --- | --- | --- |
+| `name` | Yes | - | Instance name. Used for config/service/data naming. |
+| `port` | Yes | - | Redis port for this instance. |
+| `redis_requirepass` | No | `redis_requirepass` | Password for this instance. |
+| `redis_maxmemory` | No | `redis_maxmemory` | Per-instance max memory override. |
+| `redis_maxmemory_policy` | No | `redis_maxmemory_policy` | Per-instance eviction policy override. |
 
 ## Dependencies
 
@@ -157,8 +58,21 @@ None.
 
 ```yaml
 - hosts: all
+  become: true
   roles:
-    - role: geerlingguy.redis
+    - role: ansible-role-redis
+      vars:
+        redis_bind_interface: "0.0.0.0"
+        redis_instances:
+          - name: "{{ immich_redis_db }}"
+            port: "{{ immich_redis_port }}"
+            redis_requirepass: "{{ immich_redis_password }}"
+          - name: "{{ nextcloud_redis_db }}"
+            port: "{{ nextcloud_redis_port }}"
+            redis_requirepass: "{{ nextcloud_redis_password }}"
+          - name: "{{ paperless_redis_db }}"
+            port: "{{ paperless_redis_port }}"
+            redis_requirepass: "{{ paperless_redis_password }}"
 ```
 
 ## License
