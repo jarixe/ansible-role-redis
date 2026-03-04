@@ -1,0 +1,119 @@
+---
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_facts.os_family }}.yml"
+
+- name: Define redis_package
+  ansible.builtin.set_fact:
+    redis_package: "{{ __redis_package }}"
+  when: redis_package is not defined
+
+- name: Ensure Redis is installed
+  ansible.builtin.include_tasks: setup-Debian.yml
+  when: ansible_facts.os_family == "Debian"
+
+- name: Build effective Redis instances
+  ansible.builtin.set_fact:
+    redis_instances_effective: >-
+      {{
+        redis_instances
+        if (redis_instances | length > 0)
+        else [
+          {
+            'name': 'default',
+            'port': redis_port,
+            'redis_requirepass': redis_requirepass
+          }
+        ]
+      }}
+
+- name: Build Redis service name list
+  ansible.builtin.set_fact:
+    redis_instance_service_names: "{{ redis_instances_effective | map(attribute='name') | map('regex_replace', '^(.*)$', 'redis-\\1') | list }}"
+
+- name: Ensure Redis directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ redis_conf_dir }}"
+      owner: root
+      group: root
+      mode: "0755"
+    - path: "{{ redis_runtime_dir }}"
+      owner: redis
+      group: redis
+      mode: "0755"
+    - path: "{{ redis_log_dir }}"
+      owner: redis
+      group: redis
+      mode: "0755"
+    - path: "{{ redis_data_dir }}"
+      owner: redis
+      group: redis
+      mode: "0750"
+
+- name: Ensure Redis data directory exists per instance
+  ansible.builtin.file:
+    path: "{{ redis_data_dir }}/{{ item.name }}"
+    state: directory
+    owner: redis
+    group: redis
+    mode: "0750"
+  loop: "{{ redis_instances_effective }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Render Redis configuration per instance
+  ansible.builtin.template:
+    src: redis.conf.j2
+    dest: "{{ redis_conf_dir }}/{{ item.name }}.conf"
+    owner: redis
+    group: redis
+    mode: "{{ redis_conf_mode }}"
+  vars:
+    redis_port: "{{ item.port }}"
+    redis_requirepass: "{{ item.redis_requirepass | default('') }}"
+    redis_instance_maxmemory: "{{ item.redis_maxmemory | default(redis_maxmemory) }}"
+    redis_instance_maxmemory_policy: "{{ item.redis_maxmemory_policy | default(redis_maxmemory_policy) }}"
+    redis_dbdir: "{{ redis_data_dir }}/{{ item.name }}"
+    redis_logfile: "{{ redis_log_dir }}/{{ item.name }}.log"
+    redis_pidfile: "{{ redis_runtime_dir }}/redis-{{ item.name }}.pid"
+  loop: "{{ redis_instances_effective }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: restart redis instances
+
+- name: Render Redis systemd service per instance
+  ansible.builtin.template:
+    src: redis-instance.service.j2
+    dest: "/etc/systemd/system/redis-{{ item.name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    redis_instance_conf_path: "{{ redis_conf_dir }}/{{ item.name }}.conf"
+    redis_instance: "{{ item }}"
+  loop: "{{ redis_instances_effective }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: restart redis instances
+
+- name: Disable packaged default Redis service
+  ansible.builtin.service:
+    name: "{{ redis_daemon }}"
+    state: stopped
+    enabled: false
+  when: redis_disable_default_service | bool
+
+- name: Ensure Redis instance services are enabled and running
+  ansible.builtin.systemd:
+    name: "redis-{{ item.name }}"
+    state: "{{ redis_enabled | bool | ternary('started', 'stopped') }}"
+    enabled: "{{ redis_enabled }}"
+    daemon_reload: true
+  loop: "{{ redis_instances_effective }}"
+  loop_control:
+    label: "{{ item.name }}"
