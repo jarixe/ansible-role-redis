@@ -1,0 +1,41 @@
+---
+- name: Reject legacy redis_-prefixed instance keys
+  vars:
+    redis_legacy_instance_keys: >-
+      {{ redis_instances | map('list') | flatten
+         | select('match', '^redis_') | unique | list }}
+  ansible.builtin.assert:
+    that:
+      - redis_legacy_instance_keys | length == 0
+    fail_msg: >-
+      redis_instances carries {{ redis_legacy_instance_keys | join(', ') }}.
+      Instance keys take no redis_ prefix — that prefix belongs to the global
+      variables they fall back to. Rename to password, maxmemory and
+      maxmemory_policy; the fallback is silent, so leaving them renders a
+      configuration missing those settings instead of failing here.
+    success_msg: redis_instances uses the unprefixed instance keys.
+    quiet: true
+
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_facts.os_family }}.yml"
+
+- name: Define redis_package
+  ansible.builtin.set_fact:
+    redis_package: "{{ __redis_package }}"
+  when: redis_package is not defined
+
+- name: Build effective Redis instances
+  ansible.builtin.set_fact:
+    redis_instances_effective: >-
+      {{
+        redis_instances
+        if (redis_instances | length > 0)
+        else [
+          {
+            'name': 'default',
+            'port': redis_port,
+            'password': redis_requirepass
+          }
+        ]
+      }}
+  no_log: true

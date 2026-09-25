@@ -1,5 +1,5 @@
 [Unit]
-Description=Redis In-Memory Data Store (%i)
+Description=Redis In-Memory Data Store ({{ redis_instance.name }})
 After=network.target
 
 [Service]
@@ -7,7 +7,9 @@ Type=notify
 User=redis
 Group=redis
 ExecStart=/usr/bin/redis-server {{ redis_instance_conf_path }}
-ExecStop=/usr/bin/redis-cli -p {{ redis_instance.port }} shutdown
+# SIGTERM uses Redis's graceful shutdown path without putting its password in
+# the process list or systemd unit.
+ExecStop=/bin/kill -s TERM $MAINPID
 RuntimeDirectory=redis
 RuntimeDirectoryMode=0755
 LimitNOFILE=10032

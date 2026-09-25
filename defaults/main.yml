@@ -37,6 +37,11 @@ redis_includes: []
 # Require authentication to Redis with a password.
 redis_requirepass: ""
 
+# Optional replication defaults. Per-instance values take precedence.
+redis_replicaof_host: ""
+redis_masterauth: ""
+redis_replica_read_only: "yes"
+
 # Disable certain Redis commands for security reasons.
 redis_disabled_commands: []
 #  - FLUSHDB
@@ -65,3 +70,17 @@ redis_data_dir: /var/lib/redis
 redis_supervised: systemd
 redis_daemonize: "no"
 redis_disable_default_service: true
+redis_healthcheck_retries: 12
+redis_healthcheck_delay: 5
+
+# Address the readiness checks connect to. Redis listens on
+# redis_bind_interface, which is not necessarily a loopback address: bind one
+# specific VLAN address and nothing answers on 127.0.0.1, so a hardcoded
+# loopback check would time out on a perfectly healthy instance. A wildcard
+# bind does cover loopback, so prefer loopback there and use the bound address
+# otherwise. Override directly when the checks must take another route.
+redis_bind_primary_address: "{{ (redis_bind_interface | string).split() | first | default('127.0.0.1', true) }}"
+redis_healthcheck_host: >-
+  {{ '127.0.0.1' if redis_bind_primary_address in ['0.0.0.0', '*', '127.0.0.1']
+     else ('::1' if redis_bind_primary_address in ['::', '::0']
+           else redis_bind_primary_address) }}

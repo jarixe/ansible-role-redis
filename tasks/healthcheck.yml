@@ -1,0 +1,51 @@
+---
+- name: Wait for Redis instances to accept authenticated commands
+  vars:
+    redis_instance_password: "{{ item.password | default(redis_requirepass) }}"
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['redis-cli', '--no-auth-warning', '-h', redis_healthcheck_host,
+         '-p', item.port | string]
+        + ['PING']
+      }}
+  environment: "{{ {'REDISCLI_AUTH': redis_instance_password} if redis_instance_password else {} }}"
+  loop: "{{ redis_instances_effective }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: redis_ping
+  until: redis_ping.stdout == 'PONG'
+  retries: "{{ redis_healthcheck_retries }}"
+  delay: "{{ redis_healthcheck_delay }}"
+  changed_when: false
+  no_log: "{{ redis_instance_password | length > 0 }}"
+  when:
+    - redis_enabled | bool
+    - not ansible_check_mode
+
+- name: Wait for Redis replicas to synchronize with their primary
+  vars:
+    redis_instance_password: "{{ item.password | default(redis_requirepass) }}"
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['redis-cli', '--no-auth-warning', '-h', redis_healthcheck_host,
+         '-p', item.port | string]
+        + ['INFO', 'replication']
+      }}
+  environment: "{{ {'REDISCLI_AUTH': redis_instance_password} if redis_instance_password else {} }}"
+  loop: "{{ redis_instances_effective }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - redis_enabled | bool
+    - item.replicaof_host | default(redis_replicaof_host) | length > 0
+    - not ansible_check_mode
+  register: redis_replication_status
+  until:
+    - "'role:slave' in redis_replication_status.stdout"
+    - "'master_link_status:up' in redis_replication_status.stdout"
+  retries: "{{ redis_healthcheck_retries }}"
+  delay: "{{ redis_healthcheck_delay }}"
+  changed_when: false
+  no_log: "{{ redis_instance_password | length > 0 }}"

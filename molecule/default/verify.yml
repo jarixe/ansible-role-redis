@@ -1,0 +1,61 @@
+---
+- name: Verify Redis replication
+  hosts: all
+  become: true
+  vars:
+    # Mirrors converge.yml. The passwords live apart from the instance list so
+    # that nothing which ends up in a task result carries a credential.
+    redis_verify_instances:
+      - name: application
+        port: 6379
+        replicates: true
+      # Passwordless, and therefore a primary on both hosts: Redis protected
+      # mode only lets a passwordless instance be reached over loopback.
+      - name: sessions
+        port: 6380
+        replicates: false
+    redis_verify_passwords:
+      application: molecule-password
+      sessions: ""
+  tasks:
+    # Neither the argv nor INFO replication carries a credential, and the
+    # environment never reaches the result, so this runs without no_log: a
+    # failure here has to be readable.
+    - name: Read local Redis replication state
+      vars:
+        redis_verify_password: "{{ redis_verify_passwords[item.name] }}"
+      ansible.builtin.command:
+        argv:
+          - redis-cli
+          - --no-auth-warning
+          - -p
+          - "{{ item.port }}"
+          - INFO
+          - replication
+      # An empty REDISCLI_AUTH is not the same as an unset one: redis-cli would
+      # send `AUTH ""` and the passwordless instance would reject it.
+      environment: "{{ {'REDISCLI_AUTH': redis_verify_password} if redis_verify_password else {} }}"
+      loop: "{{ redis_verify_instances }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: redis_replication
+      changed_when: false
+
+    - name: Verify the expected Redis role
+      ansible.builtin.assert:
+        that:
+          - >-
+            ('role:slave' in item.1 and 'master_link_status:up' in item.1)
+            if (item.0.replicates and inventory_hostname == 'replica')
+            else ('role:master' in item.1)
+        fail_msg: >-
+          {{ inventory_hostname }}/{{ item.0.name }} reports
+          {{ item.1.splitlines() | map('trim')
+             | select('match', '^(role|master_link_status):')
+             | join(', ') | default('no role line at all', true) }}.
+        quiet: true
+      loop: >-
+        {{ redis_verify_instances
+           | zip(redis_replication.results | map(attribute='stdout')) | list }}
+      loop_control:
+        label: "{{ item.0.name }}"
