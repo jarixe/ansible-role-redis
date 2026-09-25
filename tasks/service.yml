@@ -1,0 +1,33 @@
+---
+- name: Disable packaged default Redis service
+  ansible.builtin.service:
+    name: "{{ redis_daemon }}"
+    state: stopped
+    enabled: false
+  when: redis_disable_default_service | bool
+
+- name: Ensure Redis instance services are enabled and running
+  ansible.builtin.systemd:
+    name: "redis-{{ item.name }}"
+    state: "{{ redis_enabled | bool | ternary('started', 'stopped') }}"
+    enabled: "{{ redis_enabled }}"
+    daemon_reload: true
+  loop: "{{ redis_instances_effective }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: "{{ redis_instance_has_credential }}"
+
+- name: Restart Redis instances whose configuration or unit changed
+  ansible.builtin.systemd:
+    name: "redis-{{ item.name }}"
+    state: restarted
+    daemon_reload: true
+  loop: "{{ redis_instances_effective }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: redis_instance_index
+  when:
+    - redis_enabled | bool
+    - redis_instance_conf.results[redis_instance_index] is changed
+      or redis_instance_unit.results[redis_instance_index] is changed
+  no_log: "{{ redis_instance_has_credential }}"

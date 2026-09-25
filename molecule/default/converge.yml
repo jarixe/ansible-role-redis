@@ -1,17 +1,34 @@
 ---
-- name: Converge
+- name: Converge a Redis primary and replica
   hosts: all
-  #become: true
-
+  become: true
+  vars:
+    redis_bind_interface: 0.0.0.0
+    redis_replicaof_host: "{{ 'primary' if inventory_hostname == 'replica' else '' }}"
+    redis_instances:
+      - name: application
+        port: 6379
+        password: molecule-password
+        maxmemory: 64mb
+        maxmemory_policy: allkeys-lru
+      # Left without a password on purpose: the readiness check has to reach an
+      # instance that has no requirepass, which is what the role's own defaults
+      # produce. It stays a primary because it cannot be anything else — Redis
+      # refuses non-loopback connections to a passwordless instance, so it has
+      # no way to replicate from one host to another.
+      - name: sessions
+        port: 6380
+        replicaof_host: ""
+      # Socket-only: port 0 disables TCP, so the readiness check has to reach
+      # this one over its socket instead of over -h/-p.
+      - name: cache
+        port: 0
+        unixsocket: /run/redis/cache.sock
+        replicaof_host: ""
   pre_tasks:
-    - name: Update apt cache.
-      apt: update_cache=true cache_valid_time=600
-      when: ansible_facts.os_family == 'Debian'
-
-    - name: Clear out repo for Fedora.
-      set_fact:
-        redis_enablerepo: ""
-      when: ansible_facts.distribution == 'Fedora'
-
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 600
   roles:
-    - role: geerlingguy.redis
+    - role: ansible-role-redis

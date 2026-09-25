@@ -6,8 +6,8 @@ pidfile {{ redis_pidfile }}
 port {{ redis_port }}
 bind {{ redis_bind_interface }}
 
-{% if redis_unixsocket %}
-unixsocket {{ redis_unixsocket }}
+{% if redis_instance_unixsocket %}
+unixsocket {{ redis_instance_unixsocket }}
 {% endif %}
 
 timeout {{ redis_timeout }}
@@ -47,8 +47,17 @@ no-appendfsync-on-rewrite no
 include {{ include }}
 {% endfor %}
 
-{% if redis_requirepass %}
-requirepass {{ redis_requirepass }}
+{% if redis_instance_password %}
+requirepass {{ redis_instance_password }}
+{% endif %}
+
+{% if redis_instance_replicaof_host %}
+replicaof {{ redis_instance_replicaof_host }} {{ redis_instance_replicaof_port }}
+replica-read-only {{ redis_replica_read_only }}
+{% endif %}
+{% if redis_instance_masterauth %}
+# Kept on primaries too so Redis FAILOVER can demote them without losing auth.
+masterauth {{ redis_instance_masterauth }}
 {% endif %}
 
 {% for redis_disabled_command in redis_disabled_commands %}
