@@ -58,6 +58,7 @@ Installs [Redis](http://redis.io/) on Linux.
 | `replicaof_host` | No | `redis_replicaof_host` | Primary host for this instance; empty makes it a primary. |
 | `replicaof_port` | No | Instance `port` | Port of the corresponding primary instance. |
 | `masterauth` | No | `redis_masterauth`, then this instance's effective password | Credential used for primary-to-replica synchronization. |
+| `unixsocket` | No | `redis_unixsocket` | Socket this instance listens on. Required when `port` is `0`. |
 
 ## Dependencies
 
@@ -79,6 +80,10 @@ An instance without a password is only reachable over loopback, whatever
 connection to an instance whose default user has no password. Give any
 instance that has to be reached from another host — a replica synchronizing
 from it included — a `password`.
+
+An instance with `port: 0` serves over its socket only; the readiness check
+follows it there instead of over TCP. The role refuses to run when such an
+instance has no socket, since nothing could reach it.
 
 ## Example Playbook
 

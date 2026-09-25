@@ -3,10 +3,14 @@
   vars:
     redis_instance_password: "{{ item.password | default(redis_requirepass) }}"
   ansible.builtin.command:
+    # An instance with port 0 serves over its socket only, where -h/-p can
+    # never connect.
     argv: >-
       {{
-        ['redis-cli', '--no-auth-warning', '-h', redis_healthcheck_host,
-         '-p', item.port | string]
+        ['redis-cli', '--no-auth-warning']
+        + (['-s', item.unixsocket | default(redis_unixsocket)]
+           if (item.port | int) == 0
+           else ['-h', redis_healthcheck_host, '-p', item.port | string])
         + ['PING']
       }}
   environment: "{{ {'REDISCLI_AUTH': redis_instance_password} if redis_instance_password else {} }}"
@@ -18,7 +22,7 @@
   retries: "{{ redis_healthcheck_retries }}"
   delay: "{{ redis_healthcheck_delay }}"
   changed_when: false
-  no_log: "{{ redis_instance_password | length > 0 }}"
+  no_log: "{{ redis_instance_has_credential }}"
   when:
     - redis_enabled | bool
     - not ansible_check_mode
@@ -29,8 +33,10 @@
   ansible.builtin.command:
     argv: >-
       {{
-        ['redis-cli', '--no-auth-warning', '-h', redis_healthcheck_host,
-         '-p', item.port | string]
+        ['redis-cli', '--no-auth-warning']
+        + (['-s', item.unixsocket | default(redis_unixsocket)]
+           if (item.port | int) == 0
+           else ['-h', redis_healthcheck_host, '-p', item.port | string])
         + ['INFO', 'replication']
       }}
   environment: "{{ {'REDISCLI_AUTH': redis_instance_password} if redis_instance_password else {} }}"
@@ -48,4 +54,4 @@
   retries: "{{ redis_healthcheck_retries }}"
   delay: "{{ redis_healthcheck_delay }}"
   changed_when: false
-  no_log: "{{ redis_instance_password | length > 0 }}"
+  no_log: "{{ redis_instance_has_credential }}"

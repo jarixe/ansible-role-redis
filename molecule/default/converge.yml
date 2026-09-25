@@ -19,6 +19,12 @@
       - name: sessions
         port: 6380
         replicaof_host: ""
+      # Socket-only: port 0 disables TCP, so the readiness check has to reach
+      # this one over its socket instead of over -h/-p.
+      - name: cache
+        port: 0
+        unixsocket: /run/redis/cache.sock
+        replicaof_host: ""
   pre_tasks:
     - name: Update apt cache
       ansible.builtin.apt:

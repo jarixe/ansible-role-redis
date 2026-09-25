@@ -61,6 +61,13 @@ redis_disabled_commands: []
 
 redis_extra_config: ""
 
+# Evaluated inside the per-instance loops. A loop result carries its whole
+# item, so it has to be hidden whenever the instance itself holds a credential
+# — a replica may carry only masterauth, with no password of its own.
+redis_instance_has_credential: >-
+  {{ (item.password | default('', true) | length > 0)
+     or (item.masterauth | default('', true) | length > 0) }}
+
 # Multi-instance configuration.
 redis_instances: []
 redis_conf_dir: /etc/redis

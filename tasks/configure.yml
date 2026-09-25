@@ -34,9 +34,7 @@
   loop: "{{ redis_instances_effective }}"
   loop_control:
     label: "{{ item.name }}"
-  # The label only shortens the result header; the result body still carries
-  # the whole item, password included, as soon as the play runs at -v.
-  no_log: "{{ item.password | default(redis_requirepass) | length > 0 }}"
+  no_log: "{{ redis_instance_has_credential }}"
 
 - name: Render Redis configuration per instance
   ansible.builtin.template:
@@ -48,6 +46,7 @@
   vars:
     redis_port: "{{ item.port }}"
     redis_instance_password: "{{ item.password | default(redis_requirepass) }}"
+    redis_instance_unixsocket: "{{ item.unixsocket | default(redis_unixsocket) }}"
     redis_instance_maxmemory: "{{ item.maxmemory | default(redis_maxmemory) }}"
     redis_instance_maxmemory_policy: "{{ item.maxmemory_policy | default(redis_maxmemory_policy) }}"
     redis_instance_replicaof_host: "{{ item.replicaof_host | default(redis_replicaof_host) }}"
@@ -79,5 +78,5 @@
   loop: "{{ redis_instances_effective }}"
   loop_control:
     label: "{{ item.name }}"
-  no_log: "{{ item.password | default(redis_requirepass) | length > 0 }}"
+  no_log: "{{ redis_instance_has_credential }}"
   register: redis_instance_unit

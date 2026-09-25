@@ -6,8 +6,8 @@ pidfile {{ redis_pidfile }}
 port {{ redis_port }}
 bind {{ redis_bind_interface }}
 
-{% if redis_unixsocket %}
-unixsocket {{ redis_unixsocket }}
+{% if redis_instance_unixsocket %}
+unixsocket {{ redis_instance_unixsocket }}
 {% endif %}
 
 timeout {{ redis_timeout }}

@@ -39,3 +39,18 @@
         ]
       }}
   no_log: true
+
+- name: Reject instances that can be reached over neither TCP nor a socket
+  ansible.builtin.assert:
+    that:
+      - (item.port | int) > 0
+        or (item.unixsocket | default(redis_unixsocket) | length > 0)
+    fail_msg: >-
+      Instance {{ item.name }} has port 0 and no unixsocket, so nothing can
+      connect to it — set a port, or give it a unixsocket of its own.
+    success_msg: "{{ item.name }} is reachable."
+    quiet: true
+  loop: "{{ redis_instances_effective }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: "{{ redis_instance_has_credential }}"

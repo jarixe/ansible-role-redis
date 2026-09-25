@@ -15,7 +15,7 @@
   loop: "{{ redis_instances_effective }}"
   loop_control:
     label: "{{ item.name }}"
-  no_log: "{{ item.password | default(redis_requirepass) | length > 0 }}"
+  no_log: "{{ redis_instance_has_credential }}"
 
 - name: Restart Redis instances whose configuration or unit changed
   ansible.builtin.systemd:
@@ -30,4 +30,4 @@
     - redis_enabled | bool
     - redis_instance_conf.results[redis_instance_index] is changed
       or redis_instance_unit.results[redis_instance_index] is changed
-  no_log: "{{ item.password | default(redis_requirepass) | length > 0 }}"
+  no_log: "{{ redis_instance_has_credential }}"

@@ -3,20 +3,25 @@
   hosts: all
   become: true
   vars:
-    # Mirrors converge.yml. The passwords live apart from the instance list so
-    # that nothing which ends up in a task result carries a credential.
+    # Mirrors converge.yml, with the redis-cli arguments each instance is
+    # reachable on. The passwords live apart from the instance list so that
+    # nothing which ends up in a task result carries a credential.
     redis_verify_instances:
       - name: application
-        port: 6379
+        args: ["-p", "6379"]
         replicates: true
       # Passwordless, and therefore a primary on both hosts: Redis protected
       # mode only lets a passwordless instance be reached over loopback.
       - name: sessions
-        port: 6380
+        args: ["-p", "6380"]
+        replicates: false
+      - name: cache
+        args: ["-s", "/run/redis/cache.sock"]
         replicates: false
     redis_verify_passwords:
       application: molecule-password
       sessions: ""
+      cache: ""
   tasks:
     # Neither the argv nor INFO replication carries a credential, and the
     # environment never reaches the result, so this runs without no_log: a
@@ -25,15 +30,9 @@
       vars:
         redis_verify_password: "{{ redis_verify_passwords[item.name] }}"
       ansible.builtin.command:
-        argv:
-          - redis-cli
-          - --no-auth-warning
-          - -p
-          - "{{ item.port }}"
-          - INFO
-          - replication
+        argv: "{{ ['redis-cli', '--no-auth-warning'] + item.args + ['INFO', 'replication'] }}"
       # An empty REDISCLI_AUTH is not the same as an unset one: redis-cli would
-      # send `AUTH ""` and the passwordless instance would reject it.
+      # send `AUTH ""` and a passwordless instance would reject it.
       environment: "{{ {'REDISCLI_AUTH': redis_verify_password} if redis_verify_password else {} }}"
       loop: "{{ redis_verify_instances }}"
       loop_control:
