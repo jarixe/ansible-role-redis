@@ -68,6 +68,13 @@ Instance units stop Redis with `SIGTERM`, which follows Redis's graceful
 shutdown path without embedding an authenticated `redis-cli` invocation in the
 unit or exposing a password in the process list.
 
+Each instance's `replicaof` line lives in its own
+`<name>.replication.conf`, included from the instance configuration. When
+that file is the only thing that changed, the role applies it to the running
+instance with `REPLICAOF` instead of restarting it, so promoting a replica or
+pointing an instance at a new primary never costs a restart. Any other
+configuration or unit change still restarts the instance.
+
 The role restarts the instances whose configuration or unit file changed
 itself, just before the readiness checks, rather than notifying a handler:
 handlers only run at the end of the play, and `meta: flush_handlers` is

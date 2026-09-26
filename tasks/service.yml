@@ -31,3 +31,33 @@
     - redis_instance_conf.results[redis_instance_index] is changed
       or redis_instance_unit.results[redis_instance_index] is changed
   no_log: "{{ redis_instance_has_credential }}"
+
+- name: Apply replication changes to running instances in place
+  vars:
+    redis_instance_password: "{{ item.password | default(redis_requirepass) }}"
+    redis_instance_replicaof_host: "{{ item.replicaof_host | default(redis_replicaof_host) }}"
+    redis_instance_replicaof_port: "{{ item.replicaof_port | default(item.port) }}"
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['redis-cli', '--no-auth-warning']
+        + (['-s', item.unixsocket | default(redis_unixsocket)]
+           if (item.port | int) == 0
+           else ['-h', redis_healthcheck_host, '-p', item.port | string])
+        + (['REPLICAOF', redis_instance_replicaof_host,
+            redis_instance_replicaof_port | string]
+           if redis_instance_replicaof_host else ['REPLICAOF', 'NO', 'ONE'])
+      }}
+  environment: "{{ {'REDISCLI_AUTH': redis_instance_password} if redis_instance_password else {} }}"
+  loop: "{{ redis_instances_effective }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: redis_instance_index
+  when:
+    - redis_enabled | bool
+    - not ansible_check_mode
+    - redis_instance_replication.results[redis_instance_index] is changed
+    - redis_instance_conf.results[redis_instance_index] is not changed
+    - redis_instance_unit.results[redis_instance_index] is not changed
+  changed_when: true
+  no_log: "{{ redis_instance_has_credential }}"

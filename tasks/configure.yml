@@ -36,6 +36,22 @@
     label: "{{ item.name }}"
   no_log: "{{ redis_instance_has_credential }}"
 
+- name: Render Redis replication configuration per instance
+  ansible.builtin.template:
+    src: redis-replication.conf.j2
+    dest: "{{ redis_conf_dir }}/{{ item.name }}.replication.conf"
+    owner: redis
+    group: redis
+    mode: "{{ redis_conf_mode }}"
+  vars:
+    redis_instance_replicaof_host: "{{ item.replicaof_host | default(redis_replicaof_host) }}"
+    redis_instance_replicaof_port: "{{ item.replicaof_port | default(item.port) }}"
+  loop: "{{ redis_instances_effective }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: "{{ redis_instance_has_credential }}"
+  register: redis_instance_replication
+
 - name: Render Redis configuration per instance
   ansible.builtin.template:
     src: redis.conf.j2
@@ -49,8 +65,7 @@
     redis_instance_unixsocket: "{{ item.unixsocket | default(redis_unixsocket) }}"
     redis_instance_maxmemory: "{{ item.maxmemory | default(redis_maxmemory) }}"
     redis_instance_maxmemory_policy: "{{ item.maxmemory_policy | default(redis_maxmemory_policy) }}"
-    redis_instance_replicaof_host: "{{ item.replicaof_host | default(redis_replicaof_host) }}"
-    redis_instance_replicaof_port: "{{ item.replicaof_port | default(item.port) }}"
+    redis_instance_replication_conf_path: "{{ redis_conf_dir }}/{{ item.name }}.replication.conf"
     redis_instance_masterauth: >-
       {{ item.masterauth
          | default(redis_masterauth if redis_masterauth
