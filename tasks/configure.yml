@@ -50,7 +50,6 @@
   loop_control:
     label: "{{ item.name }}"
   no_log: "{{ redis_instance_has_credential }}"
-  register: redis_instance_replication
 
 - name: Render Redis configuration per instance
   ansible.builtin.template:

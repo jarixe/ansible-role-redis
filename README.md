@@ -70,10 +70,13 @@ unit or exposing a password in the process list.
 
 Each instance's `replicaof` line lives in its own
 `<name>.replication.conf`, included from the instance configuration. When
-that file is the only thing that changed, the role applies it to the running
-instance with `REPLICAOF` instead of restarting it, so promoting a replica or
-pointing an instance at a new primary never costs a restart. Any other
-configuration or unit change still restarts the instance.
+that file is the only thing that changed, the instance is not restarted:
+on every run the role compares each running instance's replication state with
+its file and sends `REPLICAOF` wherever they differ, so promoting a replica or
+pointing an instance at a new primary never costs a restart, and a run that
+stopped after writing the file is completed by the next one. The role fails,
+naming the instances, when Redis rejects the command. Any other configuration
+or unit change still restarts the instance.
 
 The role restarts the instances whose configuration or unit file changed
 itself, just before the readiness checks, rather than notifying a handler:
