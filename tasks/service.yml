@@ -49,6 +49,13 @@
   loop_control:
     label: "{{ item.name }}"
   register: redis_instance_replication_state
+  until:
+    - redis_instance_replication_state.rc == 0
+    - >-
+      'role:master' in redis_instance_replication_state.stdout
+      or 'role:slave' in redis_instance_replication_state.stdout
+  retries: "{{ redis_healthcheck_retries }}"
+  delay: "{{ redis_healthcheck_delay }}"
   failed_when: false
   changed_when: false
   when:
