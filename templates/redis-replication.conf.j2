@@ -1,0 +1,4 @@
+# {{ ansible_managed }}
+{% if redis_instance_replicaof_host %}
+replicaof {{ redis_instance_replicaof_host }} {{ redis_instance_replicaof_port }}
+{% endif %}

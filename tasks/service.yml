@@ -31,3 +31,96 @@
     - redis_instance_conf.results[redis_instance_index] is changed
       or redis_instance_unit.results[redis_instance_index] is changed
   no_log: "{{ redis_instance_has_credential }}"
+
+- name: Read the replication state of each running instance
+  vars:
+    redis_instance_password: "{{ item.password | default(redis_requirepass) }}"
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['redis-cli', '--no-auth-warning']
+        + (['-s', item.unixsocket | default(redis_unixsocket)]
+           if (item.port | int) == 0
+           else ['-h', redis_healthcheck_host, '-p', item.port | string])
+        + ['INFO', 'replication']
+      }}
+  environment: "{{ {'REDISCLI_AUTH': redis_instance_password} if redis_instance_password else {} }}"
+  loop: "{{ redis_instances_effective }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: redis_instance_replication_state
+  until:
+    - redis_instance_replication_state.rc == 0
+    - >-
+      'role:master' in redis_instance_replication_state.stdout
+      or 'role:slave' in redis_instance_replication_state.stdout
+  retries: "{{ redis_healthcheck_retries }}"
+  delay: "{{ redis_healthcheck_delay }}"
+  failed_when: false
+  changed_when: false
+  when:
+    - redis_enabled | bool
+    - not ansible_check_mode
+  no_log: "{{ redis_instance_has_credential }}"
+
+- name: Bring each running instance's replication in line with its file
+  vars:
+    redis_instance_password: "{{ item.password | default(redis_requirepass) }}"
+    redis_instance_replicaof_host: "{{ item.replicaof_host | default(redis_replicaof_host) }}"
+    redis_instance_replicaof_port: "{{ item.replicaof_port | default(item.port) }}"
+    redis_instance_state: >-
+      {{
+        redis_instance_replication_state.results[redis_instance_index].stdout_lines
+        | default([]) | map('trim') | list
+      }}
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['redis-cli', '--no-auth-warning']
+        + (['-s', item.unixsocket | default(redis_unixsocket)]
+           if (item.port | int) == 0
+           else ['-h', redis_healthcheck_host, '-p', item.port | string])
+        + (['REPLICAOF', redis_instance_replicaof_host,
+            redis_instance_replicaof_port | string]
+           if redis_instance_replicaof_host else ['REPLICAOF', 'NO', 'ONE'])
+      }}
+  environment: "{{ {'REDISCLI_AUTH': redis_instance_password} if redis_instance_password else {} }}"
+  loop: "{{ redis_instances_effective }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: redis_instance_index
+  register: redis_instance_replication_applied
+  when:
+    - redis_enabled | bool
+    - not ansible_check_mode
+    - redis_instance_state | length > 0
+    - >-
+      ('role:master' not in redis_instance_state)
+      if not redis_instance_replicaof_host
+      else not ('role:slave' in redis_instance_state
+                and ('master_host:' ~ redis_instance_replicaof_host) in redis_instance_state
+                and ('master_port:' ~ redis_instance_replicaof_port) in redis_instance_state)
+  failed_when: false
+  changed_when: true
+  no_log: "{{ redis_instance_has_credential }}"
+
+- name: Refuse replication changes the instances rejected
+  vars:
+    redis_instance_replication_rejected: >-
+      {{
+        redis_instance_replication_applied.results
+        | selectattr('stdout', 'defined')
+        | rejectattr('stdout', 'match', 'OK')
+        | map(attribute='item.name') | list
+      }}
+  ansible.builtin.assert:
+    that:
+      - redis_instance_replication_rejected | length == 0
+    fail_msg: >-
+      Redis rejected REPLICAOF on {{ redis_instance_replication_rejected | join(', ') }},
+      so those instances do not follow their replication configuration. Check
+      that REPLICAOF is not disabled and that no failover is in progress there.
+    quiet: true
+  when:
+    - redis_enabled | bool
+    - not ansible_check_mode

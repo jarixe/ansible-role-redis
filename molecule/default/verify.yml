@@ -58,3 +58,16 @@
            | zip(redis_replication.results | map(attribute='stdout')) | list }}
       loop_control:
         label: "{{ item.0.name }}"
+
+    - name: Read the replication configuration of the replicating instance
+      ansible.builtin.slurp:
+        src: /etc/redis/application.replication.conf
+      register: redis_replication_conf
+
+    - name: Verify the replication configuration follows the host's role
+      ansible.builtin.assert:
+        that:
+          - >-
+            ('replicaof primary 6379' in (redis_replication_conf.content | b64decode))
+            == (inventory_hostname == 'replica')
+        quiet: true

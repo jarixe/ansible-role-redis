@@ -1,0 +1,38 @@
+---
+- name: Simulate interrupted replication reconciliation
+  hosts: all
+  become: true
+  tasks:
+    - name: Record the running application process
+      ansible.builtin.systemd_service:
+        name: redis-application
+      register: redis_process_before_reconcile
+      changed_when: false
+
+    - name: Leave the replica writable while its file still declares replication
+      ansible.builtin.command:
+        argv: [redis-cli, --no-auth-warning, -p, "6379", REPLICAOF, "NO", "ONE"]
+      environment:
+        REDISCLI_AUTH: molecule-password
+      when: inventory_hostname == 'replica'
+      changed_when: true
+
+- name: Reconcile the unchanged files against the running state
+  ansible.builtin.import_playbook: converge.yml
+
+- name: Verify reconciliation did not restart either Redis process
+  hosts: all
+  become: true
+  tasks:
+    - name: Read the application process after reconciliation
+      ansible.builtin.systemd_service:
+        name: redis-application
+      register: redis_process_after_reconcile
+      changed_when: false
+
+    - name: Require the original process to remain running
+      ansible.builtin.assert:
+        that:
+          - redis_process_before_reconcile.status.MainPID | int > 0
+          - redis_process_before_reconcile.status.MainPID == redis_process_after_reconcile.status.MainPID
+        quiet: true
